@@ -3,6 +3,11 @@ package fi.lauripiispanen.benchmarks;
 import fi.lauripiispanen.benchmarks.state.SharedState;
 import fi.lauripiispanen.benchmarks.state.SharedStatePadded;
 
+/**
+ * This is a simple wrapper to help isolate the compilation unit from the
+ * JMH framework. The purpose of this class is to output less compiled
+ * assembly to make the output more readable and concise.
+ */
 public class CompilationMain {
 
   static final SharedState sharedState = new SharedState();
