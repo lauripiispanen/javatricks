@@ -4,7 +4,10 @@ This repository contains various experiments exploring the internal workings and
 
 ## Experiment 1: False Sharing
 
+<details>
+<summary>
 This experiment investigates the phenomenon of "false sharing" in multi-threaded Java applications.
+</summary>
 
 ### False Sharing?
 
@@ -76,11 +79,11 @@ Looking at the compiled assembly code confirms the memory layout differences:
 The offset between accesses is small (#0x10, or 16 bytes), indicating the variables are close together in memory, likely within the same cache line.
 
 ```assembly
-0x0000000147ac81a8:   add	x11, x10, #0x10       ; pointer to field `value1`
-0x0000000147ac81ac:   ldar	x11, [x11]            ; atomic load
-0x0000000147ac81b0:   add	x11, x11, #0x1        ; increment
-0x0000000147ac81b4:   add	x12, x10, #0x10
-0x0000000147ac81b8:   stlr	x11, [x12]            ; atomic store (volatile)
+ add	x11, x10, #0x10       ; pointer to field `value1`
+ ldar	x11, [x11]            ; atomic load
+ add	x11, x11, #0x1        ; increment
+ add	x12, x10, #0x10
+ stlr	x11, [x12]            ; atomic store (volatile)
 ```
 
 **Padded (`sharedPadded`):**
@@ -88,11 +91,11 @@ The offset between accesses is small (#0x10, or 16 bytes), indicating the variab
 The offset is much larger (#0x50, or 80 bytes), exceeding the typical cache line size (64 bytes), thus placing the variables on different cache lines.
 
 ```assembly
-0x0000000147ac81c8:   add	x12, x11, #0x50       ; pointer to field `value1`
-0x0000000147ac81cc:   ldar	x12, [x12]            ; atomic load
-0x0000000147ac81d0:   add	x12, x12, #0x1
-0x0000000147ac81d4:   add	x13, x11, #0x50
-0x0000000147ac81d8:   stlr	x12, [x13]            ; atomic store
+ add	x12, x11, #0x50       ; pointer to field `value1`
+ ldar	x12, [x12]            ; atomic load
+ add	x12, x12, #0x1
+ add	x13, x11, #0x50
+ stlr	x12, [x13]            ; atomic store
 ```
 
 *(Note: The `@Contended` annotation achieves a similar separation, managed by the JVM.)*
@@ -115,3 +118,4 @@ Output compiled assembly.
 ```
 java -cp app/build/classes/java/jmh/ -XX:+UnlockDiagnosticVMOptions -XX:+PrintAssembly -XX:+PrintCompilation -Djava.library.path=[path-to-hsdis-dylib-dir] -XX:CompileCommand=compileonly,fi.lauripiispanen.benchmarks.CompilationMain::doIt  fi.lauripiispanen.benchmarks.CompilationMain > output.asm
 ```
+</details>
