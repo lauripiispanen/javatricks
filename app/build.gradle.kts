@@ -121,14 +121,14 @@ val generateJniHeaders = tasks.register("generateJniHeaders", Exec::class) {
     val classOutput = layout.buildDirectory.dir("classes/java/jmh")
 
     inputs.dir("src/jmh/java")
-    outputs.dir("src/jmh/native")
+    outputs.dir("src/native")
 
     doFirst {
         println("Generating JNI headers...")
     }
 
     commandLine = listOf(
-        "javac", "-h", "src/jmh/native/",
+        "javac", "-h", "src/native",
         "-d", classOutput.get().asFile.absolutePath,
         "src/jmh/java/fi/lauripiispanen/benchmarks/io/IoUringBridge.java"
     )
@@ -151,8 +151,8 @@ tasks.register("runJmh", Exec::class) {
     val iterations = project.findProperty("jmh.iterations") ?: "3"
     val warmupTime = project.findProperty("jmh.warmupTime") ?: "3s"
     val blobDir = project.findProperty("jmh.blobDir") 
-        ?: "${System.getProperty("user.home")}/work/javatricks/app/blobs"
-    val includes = project.findProperty("jmh.includes") ?: ".*IoUring.*|.*CompletableFuture.*"
+        ?: "${System.getProperty("user.home")}/javatricks/app/blobs"
+    val includes = project.findProperty("jmh.includes") ?: ".*IoUring.*"
     val nativeLibPath = nativeLibPath.get().asFile.absolutePath
     
         workingDir = projectDir
@@ -170,31 +170,4 @@ tasks.register("runJmh", Exec::class) {
             "--",
             "-includes", includes.toString()
         )
-}
-
-// Task to run specific IoUring benchmark
-tasks.register("runIoUringBenchmark", Exec::class) {
-    group = "benchmarks"
-    description = "Runs JMH benchmarks specifically for the IoUring implementation"
-    
-    dependsOn("jmhJar", "compileNative")
-    
-    val blobDir = project.findProperty("jmh.blobDir") 
-        ?: "${System.getProperty("user.home")}/work/javatricks/app/blobs"
-    val nativeLibPath = nativeLibPath.get().asFile.absolutePath
-    
-    workingDir = projectDir
-    commandLine = listOf(
-        "java",
-        "-Djava.library.path=$nativeLibPath",
-        "-jar",
-        "${layout.buildDirectory.get()}/libs/app-jmh.jar",
-        "-f", "1",
-        "-wi", "3",
-        "-i", "5",
-        "-w", "3s",
-        "-p", "blobDir=$blobDir",
-        "--",
-        "-includes", ".*IoUring.*"
-    )
 }
