@@ -63,3 +63,109 @@ tasks.withType<JavaCompile>().configureEach {
         options.compilerArgs.add("java.base/jdk.internal.vm.annotation=ALL-UNNAMED")
     }
 }
+
+tasks.register("generateBlobs") {
+    group = "application"
+    description = "Generates test blob files"
+    dependsOn("compileJava")
+    
+    doLast {
+        project.javaexec {
+            mainClass.set("fi.lauripiispanen.benchmarks.io.BlobGenerator")
+            classpath = sourceSets["main"].runtimeClasspath
+        }
+    }
+}
+
+val os = org.gradle.internal.os.OperatingSystem.current()
+val nativeSourceDir = "src/native"
+
+val cFile = if (os.isLinux) "io_uring_reader.c" else "dummy_reader.c"
+val sourcePath = file("$nativeSourceDir/$cFile")
+
+val outputLib = when {
+    os.isMacOsX -> "libio_uring_reader.dylib"
+    os.isLinux -> "libio_uring_reader.so"
+    else -> throw GradleException("Unsupported OS for native build")
+}
+val nativeLibPath = layout.buildDirectory.file("nativeLibs")
+val outputPath = layout.buildDirectory.file("nativeLibs/$outputLib")
+
+val jniIncludes = listOf(
+    "${System.getenv("JAVA_HOME")}/include",
+    if (os.isMacOsX) "${System.getenv("JAVA_HOME")}/include/darwin" else "${System.getenv("JAVA_HOME")}/include/linux"
+)
+
+tasks.register<Exec>("compileNative") {
+    group = "build"
+    description = "Compiles native JNI library"
+
+    inputs.file(sourcePath)
+    outputs.file(outputPath)
+
+    commandLine = listOf(
+        "gcc", "-fPIC", "-shared",
+        "-o", outputPath.get().asFile.absolutePath,
+        sourcePath.absolutePath
+    ) + jniIncludes.map { "-I$it" }
+
+    doFirst {
+        val osName: String = System.getProperty("os.name") ?: "unknown"
+        println("Compiling native JNI library for $osName...")
+    }
+}
+
+val generateJniHeaders = tasks.register("generateJniHeaders", Exec::class) {
+    val classOutput = layout.buildDirectory.dir("classes/java/jmh")
+
+    inputs.dir("src/jmh/java")
+    outputs.dir("native/")
+
+    doFirst {
+        println("Generating JNI headers...")
+    }
+
+    commandLine = listOf(
+        "javac", "-h", "native/",
+        "-d", classOutput.get().asFile.absolutePath,
+        "src/jmh/java/fi/lauripiispanen/benchmarks/io/IoUringBridge.java"
+    )
+}
+
+tasks.named("compileJava") {
+    dependsOn(generateJniHeaders)
+}
+
+tasks.register("runJmh", Exec::class) {
+    group = "benchmarks"
+    description = "Runs JMH benchmarks with CompletableFuture tests"
+    
+    dependsOn("jmhJar")
+    
+    // Allow overriding parameters via project properties
+    val forks = project.findProperty("jmh.forks") ?: "1"
+    val warmupForks = project.findProperty("jmh.warmupForks") ?: "1"
+    val warmupIterations = project.findProperty("jmh.warmupIterations") ?: "1"
+    val iterations = project.findProperty("jmh.iterations") ?: "3"
+    val warmupTime = project.findProperty("jmh.warmupTime") ?: "3s"
+    val blobDir = project.findProperty("jmh.blobDir") 
+        ?: "${System.getProperty("user.home")}/work/javatricks/app/blobs"
+    val includes = project.findProperty("jmh.includes") ?: ".*CompletableFuture.*"
+    val nativeLibPath = nativeLibPath.get().asFile.absolutePath
+    
+        workingDir = projectDir
+        commandLine = listOf(
+            "java",
+            "-Djava.library.path=$nativeLibPath",
+            "-jar",
+            "${layout.buildDirectory.get()}/libs/app-jmh.jar",
+            "-f", forks.toString(),
+            "-wf", warmupForks.toString(),
+            "-wi", warmupIterations.toString(),
+            "-i", iterations.toString(),
+            "-w", warmupTime.toString(),
+            "-p", "blobDir=$blobDir",
+            "--",
+            "-includes", includes.toString()
+        )
+}

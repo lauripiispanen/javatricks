@@ -1,7 +1,11 @@
 .vscode/
+logs/
 
 # Ignore Gradle project-specific cache directory
 .gradle
 
 # Ignore Gradle build output directory
 build
+
+# Ignore generated code
+app/blobs
