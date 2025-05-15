@@ -103,30 +103,32 @@ tasks.register<Exec>("compileNative") {
     inputs.file(sourcePath)
     outputs.file(outputPath)
 
+    // Linux-specific flags and libraries for io_uring
+    val linuxFlags = if (os.isLinux) {
+        listOf("-luring")
+    } else {
+        listOf()
+    }
+
     commandLine = listOf(
         "gcc", "-fPIC", "-shared",
         "-o", outputPath.get().asFile.absolutePath,
         sourcePath.absolutePath
-    ) + jniIncludes.map { "-I$it" }
-
-    doFirst {
-        val osName: String = System.getProperty("os.name") ?: "unknown"
-        println("Compiling native JNI library for $osName...")
-    }
+    ) + jniIncludes.map { "-I$it" } + linuxFlags
 }
 
 val generateJniHeaders = tasks.register("generateJniHeaders", Exec::class) {
     val classOutput = layout.buildDirectory.dir("classes/java/jmh")
 
     inputs.dir("src/jmh/java")
-    outputs.dir("native/")
+    outputs.dir("src/jmh/native")
 
     doFirst {
         println("Generating JNI headers...")
     }
 
     commandLine = listOf(
-        "javac", "-h", "native/",
+        "javac", "-h", "src/jmh/native/",
         "-d", classOutput.get().asFile.absolutePath,
         "src/jmh/java/fi/lauripiispanen/benchmarks/io/IoUringBridge.java"
     )
@@ -150,7 +152,7 @@ tasks.register("runJmh", Exec::class) {
     val warmupTime = project.findProperty("jmh.warmupTime") ?: "3s"
     val blobDir = project.findProperty("jmh.blobDir") 
         ?: "${System.getProperty("user.home")}/work/javatricks/app/blobs"
-    val includes = project.findProperty("jmh.includes") ?: ".*CompletableFuture.*"
+    val includes = project.findProperty("jmh.includes") ?: ".*IoUring.*|.*CompletableFuture.*"
     val nativeLibPath = nativeLibPath.get().asFile.absolutePath
     
         workingDir = projectDir
@@ -168,4 +170,31 @@ tasks.register("runJmh", Exec::class) {
             "--",
             "-includes", includes.toString()
         )
+}
+
+// Task to run specific IoUring benchmark
+tasks.register("runIoUringBenchmark", Exec::class) {
+    group = "benchmarks"
+    description = "Runs JMH benchmarks specifically for the IoUring implementation"
+    
+    dependsOn("jmhJar", "compileNative")
+    
+    val blobDir = project.findProperty("jmh.blobDir") 
+        ?: "${System.getProperty("user.home")}/work/javatricks/app/blobs"
+    val nativeLibPath = nativeLibPath.get().asFile.absolutePath
+    
+    workingDir = projectDir
+    commandLine = listOf(
+        "java",
+        "-Djava.library.path=$nativeLibPath",
+        "-jar",
+        "${layout.buildDirectory.get()}/libs/app-jmh.jar",
+        "-f", "1",
+        "-wi", "3",
+        "-i", "5",
+        "-w", "3s",
+        "-p", "blobDir=$blobDir",
+        "--",
+        "-includes", ".*IoUring.*"
+    )
 }

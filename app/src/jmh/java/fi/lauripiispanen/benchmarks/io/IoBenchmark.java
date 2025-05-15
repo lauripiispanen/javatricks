@@ -269,4 +269,42 @@ public class IoBenchmark {
         .mapToInt(Integer::intValue)
         .sum();
   }
+
+  @Benchmark
+  @Threads(16)
+  public int randomRead_IoUring() throws IOException {
+    File f = files[ThreadLocalRandom.current().nextInt(files.length)];
+    long fileSize = f.length();
+    long[] offsets = getRandomOffsets(fileSize, chunkSize, numRandomReads);
+    
+    // Allocate buffer for all chunks
+    byte[] buffer = new byte[chunkSize * numRandomReads];
+    
+    // Use the io_uring JNI bridge to perform the reads
+    int commas = IoUringBridge.readOffsets(f.getAbsolutePath(), offsets, chunkSize, buffer);
+    
+    // If the native function returns a negative number, it's an error
+    if (commas < 0) {
+      // Fall back to regular file I/O on error or unsupported platform
+      return fallbackRandomRead(f, fileSize, offsets);
+    }
+    
+    return commas;
+  }
+  
+  private int fallbackRandomRead(File f, long fileSize, long[] offsets) throws IOException {
+    int total = 0;
+    try (RandomAccessFile raf = new RandomAccessFile(f, "r")) {
+      byte[] buf = new byte[chunkSize];
+      for (long offset : offsets) {
+        raf.seek(offset);
+        int read = raf.read(buf, 0, (int) Math.min(chunkSize, fileSize - offset));
+        for (int i = 0; i < read; i++) {
+          if (buf[i] == ',')
+            total++;
+        }
+      }
+    }
+    return total;
+  }
 }
