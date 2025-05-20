@@ -25,7 +25,7 @@ Three scenarios were tested:
 2.  **Padded:** Manual padding is added between counters to ensure they reside on separate cache lines.
 3.  **Contended:** The `@jdk.internal.vm.annotation.Contended` annotation is used, letting the JVM handle the padding automatically.
 
-**Benchmark Results:**
+**Benchmark Results (Apple M1 Max):**
 
 Manual padding w/ two threads:
 
@@ -117,5 +117,147 @@ Output compiled assembly.
 
 ```
 java -cp app/build/classes/java/jmh/ -XX:+UnlockDiagnosticVMOptions -XX:+PrintAssembly -XX:+PrintCompilation -Djava.library.path=[path-to-hsdis-dylib-dir] -XX:CompileCommand=compileonly,fi.lauripiispanen.benchmarks.CompilationMain::doIt  fi.lauripiispanen.benchmarks.CompilationMain > output.asm
+```
+</details>
+
+## Experiment 2: Division performance on modern CPUs
+
+<details>
+<summary>
+This experiment investigates the performance implications of using modulo operations versus bitwise operations for hash table indexing and Bloom filter implementations.
+</summary>
+
+### Background
+
+Modern CPUs are highly optimized for certain operations, with integer division and division operations being notably slower than bitwise operations. This experiment explores these performance characteristics in the context of hash table indexing and Bloom filter implementations.
+
+### Benchmark Design
+
+The benchmark suite tests several scenarios:
+
+1. **Pure Hash Function Performance**
+   - `hashWithModulo`: Using `Math.floorMod()` for hash value reduction
+   - `hashWithBitwiseAnd`: Using bitwise AND with (size-1) for power-of-2 sizes
+   - `hashWithoutMasking`: Raw hash computation without reduction
+
+2. **Pure Indexing Performance**
+   - `indexingWithModulo`: Using modulo for index calculation
+   - `indexingWithBitwiseAnd`: Using bitwise AND for power-of-2 sizes
+
+3. **Bloom Filter Implementations**
+   - `bloomFilterInsertWithBitSet`: Using Java's `BitSet`
+   - `bloomFilterInsertWithManualBitArray`: Manual bit array implementation
+   - `bloomFilterInsertWithBooleanArray`: Using boolean array
+   - `bloomFilterQueryWithModulo`: Query using modulo operations
+   - `bloomFilterQueryWithBitwiseAnd`: Query using bitwise operations
+
+### Results Analysis
+
+The benchmark results (on Apple M1 Max) reveal several key insights:
+
+1. **Hash Function Performance**
+   - Bitwise AND is ~2.5x faster than modulo operations
+
+2. **Indexing Performance**
+   - Bitwise AND is dramatically faster (~20x) than modulo operations
+
+3. **Bloom Filter Implementations**
+   - Manual bit array implementation shows good performance for larger sizes
+   - BitSet performance is competitive but slightly slower
+   - Query performance with bitwise operations is ~2x faster than modulo
+
+### Key Findings
+
+1. **Power-of-2 Sizing**: When possible, using power-of-2 sizes for hash tables and Bloom filters allows for efficient bitwise operations instead of modulo.
+
+2. **Implementation Choice**: The choice between BitSet, boolean array, or manual bit array depends on the use case:
+   - Boolean arrays are fastest for small sizes
+   - Manual bit arrays are more memory-efficient and perform well for larger sizes
+   - BitSet provides a good balance of convenience and performance
+
+3. **Modulo vs Bitwise**: The performance difference between modulo and bitwise operations is significant enough to warrant careful consideration in performance-critical code.
+
+### Conclusion
+
+The results demonstrate that careful consideration of CPU operation costs can lead to significant performance improvements. When implementing hash tables or Bloom filters:
+
+1. Use power-of-2 sizes when possible to enable bitwise operations
+2. Choose the appropriate bit storage implementation based on size requirements
+3. Avoid modulo operations in performance-critical paths
+4. Consider memory usage vs performance trade-offs when selecting implementations
+
+
+**Benchmark Results (Apple M1 Max):**
+
+```
+Benchmark                                                   (bitsetSize)  (numElements)  Mode  Cnt          Score         Error  Units
+CpuDivisionBenchmark.bitsetSetOnly                                131072          50000  avgt    3     105017,096 ±   19579,056  ns/op
+CpuDivisionBenchmark.bitsetSetOnly                                131072         200000  avgt    3     416390,744 ±   43046,974  ns/op
+CpuDivisionBenchmark.bitsetSetOnly                               1048576          50000  avgt    3     106044,957 ±    5715,036  ns/op
+CpuDivisionBenchmark.bitsetSetOnly                               1048576         200000  avgt    3     426784,623 ±  181585,366  ns/op
+CpuDivisionBenchmark.bloomFilterInsertWithBitSet                  131072          50000  avgt    3      53045,900 ±    3081,579  ns/op
+CpuDivisionBenchmark.bloomFilterInsertWithBitSet                  131072         200000  avgt    3     210223,274 ±    9090,088  ns/op
+CpuDivisionBenchmark.bloomFilterInsertWithBitSet                 1048576          50000  avgt    3      58811,558 ±   19257,124  ns/op
+CpuDivisionBenchmark.bloomFilterInsertWithBitSet                 1048576         200000  avgt    3     215715,031 ±   19798,896  ns/op
+CpuDivisionBenchmark.bloomFilterInsertWithBooleanArray            131072          50000  avgt    3      22519,256 ±   11065,114  ns/op
+CpuDivisionBenchmark.bloomFilterInsertWithBooleanArray            131072         200000  avgt    3      76525,463 ±    5548,244  ns/op
+CpuDivisionBenchmark.bloomFilterInsertWithBooleanArray           1048576          50000  avgt    3      57916,813 ±    6231,833  ns/op
+CpuDivisionBenchmark.bloomFilterInsertWithBooleanArray           1048576         200000  avgt    3     170518,844 ±    9453,143  ns/op
+CpuDivisionBenchmark.bloomFilterInsertWithManualBitArray          131072          50000  avgt    3      30963,484 ±   11203,913  ns/op
+CpuDivisionBenchmark.bloomFilterInsertWithManualBitArray          131072         200000  avgt    3     125916,582 ±   80444,330  ns/op
+CpuDivisionBenchmark.bloomFilterInsertWithManualBitArray         1048576          50000  avgt    3      35681,091 ±    5510,615  ns/op
+CpuDivisionBenchmark.bloomFilterInsertWithManualBitArray         1048576         200000  avgt    3     127580,281 ±   10778,755  ns/op
+CpuDivisionBenchmark.bloomFilterQueryWithBitwiseAnd               131072          50000  avgt    3     721728,185 ±   28232,733  ns/op
+CpuDivisionBenchmark.bloomFilterQueryWithBitwiseAnd:hits          131072          50000  avgt    3  129285342,000                    #
+CpuDivisionBenchmark.bloomFilterQueryWithBitwiseAnd:misses        131072          50000  avgt    3  287414658,000                    #
+CpuDivisionBenchmark.bloomFilterQueryWithBitwiseAnd               131072         200000  avgt    3    4058572,571 ±  662439,443  ns/op
+CpuDivisionBenchmark.bloomFilterQueryWithBitwiseAnd:hits          131072         200000  avgt    3  159689440,000                    #
+CpuDivisionBenchmark.bloomFilterQueryWithBitwiseAnd:misses        131072         200000  avgt    3  136910560,000                    #
+CpuDivisionBenchmark.bloomFilterQueryWithBitwiseAnd              1048576          50000  avgt    3     596910,740 ±   14164,948  ns/op
+CpuDivisionBenchmark.bloomFilterQueryWithBitwiseAnd:hits         1048576          50000  avgt    3  108509826,000                    #
+CpuDivisionBenchmark.bloomFilterQueryWithBitwiseAnd:misses       1048576          50000  avgt    3  395390174,000                    #
+CpuDivisionBenchmark.bloomFilterQueryWithBitwiseAnd              1048576         200000  avgt    3    2860234,912 ±  994504,546  ns/op
+CpuDivisionBenchmark.bloomFilterQueryWithBitwiseAnd:hits         1048576         200000  avgt    3  108479070,000                    #
+CpuDivisionBenchmark.bloomFilterQueryWithBitwiseAnd:misses       1048576         200000  avgt    3  312520930,000                    #
+CpuDivisionBenchmark.bloomFilterQueryWithModulo                   131072          50000  avgt    3    1381439,369 ±  329748,746  ns/op
+CpuDivisionBenchmark.bloomFilterQueryWithModulo:hits              131072          50000  avgt    3   67528089,000                    #
+CpuDivisionBenchmark.bloomFilterQueryWithModulo:misses            131072          50000  avgt    3  150121911,000                    #
+CpuDivisionBenchmark.bloomFilterQueryWithModulo                   131072         200000  avgt    3    6348024,405 ± 4796321,227  ns/op
+CpuDivisionBenchmark.bloomFilterQueryWithModulo:hits              131072         200000  avgt    3  102188320,000                    #
+CpuDivisionBenchmark.bloomFilterQueryWithModulo:misses            131072         200000  avgt    3   87611680,000                    #
+CpuDivisionBenchmark.bloomFilterQueryWithModulo                  1048576          50000  avgt    3    1258727,845 ±  250752,948  ns/op
+CpuDivisionBenchmark.bloomFilterQueryWithModulo:hits             1048576          50000  avgt    3   51423192,000                    #
+CpuDivisionBenchmark.bloomFilterQueryWithModulo:misses           1048576          50000  avgt    3  187376808,000                    #
+CpuDivisionBenchmark.bloomFilterQueryWithModulo                  1048576         200000  avgt    3    5420811,450 ±  236169,868  ns/op
+CpuDivisionBenchmark.bloomFilterQueryWithModulo:hits             1048576         200000  avgt    3   57202740,000                    #
+CpuDivisionBenchmark.bloomFilterQueryWithModulo:misses           1048576         200000  avgt    3  164797260,000                    #
+CpuDivisionBenchmark.booleanArraySetOnly                          131072          50000  avgt    3      17493,654 ±    6213,956  ns/op
+CpuDivisionBenchmark.booleanArraySetOnly                          131072         200000  avgt    3      63263,283 ±   33397,812  ns/op
+CpuDivisionBenchmark.booleanArraySetOnly                         1048576          50000  avgt    3      27120,142 ±    5999,949  ns/op
+CpuDivisionBenchmark.booleanArraySetOnly                         1048576         200000  avgt    3      73456,586 ±   12864,248  ns/op
+CpuDivisionBenchmark.hashWithBitwiseAnd                           131072          50000  avgt    3     454272,796 ±   74208,398  ns/op
+CpuDivisionBenchmark.hashWithBitwiseAnd                           131072         200000  avgt    3    1926717,840 ±  277792,398  ns/op
+CpuDivisionBenchmark.hashWithBitwiseAnd                          1048576          50000  avgt    3     454088,598 ±   14023,229  ns/op
+CpuDivisionBenchmark.hashWithBitwiseAnd                          1048576         200000  avgt    3    1921004,156 ±  169911,789  ns/op
+CpuDivisionBenchmark.hashWithModulo                               131072          50000  avgt    3    1172494,244 ±  145857,040  ns/op
+CpuDivisionBenchmark.hashWithModulo                               131072         200000  avgt    3    4841181,904 ±  846031,439  ns/op
+CpuDivisionBenchmark.hashWithModulo                              1048576          50000  avgt    3    1180231,025 ±  228614,130  ns/op
+CpuDivisionBenchmark.hashWithModulo                              1048576         200000  avgt    3    4848234,477 ±  314440,020  ns/op
+CpuDivisionBenchmark.hashWithoutMasking                           131072          50000  avgt    3     446747,639 ±   22707,669  ns/op
+CpuDivisionBenchmark.hashWithoutMasking                           131072         200000  avgt    3    1849552,584 ±   64065,512  ns/op
+CpuDivisionBenchmark.hashWithoutMasking                          1048576          50000  avgt    3     445367,970 ±   17998,347  ns/op
+CpuDivisionBenchmark.hashWithoutMasking                          1048576         200000  avgt    3    1937974,709 ± 1375283,655  ns/op
+CpuDivisionBenchmark.indexingWithBitwiseAnd                       131072          50000  avgt    3       5603,283 ±    1716,167  ns/op
+CpuDivisionBenchmark.indexingWithBitwiseAnd                       131072         200000  avgt    3      22488,621 ±   11268,551  ns/op
+CpuDivisionBenchmark.indexingWithBitwiseAnd                      1048576          50000  avgt    3       5625,997 ±    1261,428  ns/op
+CpuDivisionBenchmark.indexingWithBitwiseAnd                      1048576         200000  avgt    3      23630,282 ±   47738,423  ns/op
+CpuDivisionBenchmark.indexingWithModulo                           131072          50000  avgt    3     103227,632 ±   35723,276  ns/op
+CpuDivisionBenchmark.indexingWithModulo                           131072         200000  avgt    3     543050,113 ±   93756,129  ns/op
+CpuDivisionBenchmark.indexingWithModulo                          1048576          50000  avgt    3     104787,750 ±   39164,354  ns/op
+CpuDivisionBenchmark.indexingWithModulo                          1048576         200000  avgt    3     539933,978 ±   91642,901  ns/op
+CpuDivisionBenchmark.manualBitArraySetOnly                        131072          50000  avgt    3     109158,890 ±    8196,172  ns/op
+CpuDivisionBenchmark.manualBitArraySetOnly                        131072         200000  avgt    3     435514,457 ±   52146,252  ns/op
+CpuDivisionBenchmark.manualBitArraySetOnly                       1048576          50000  avgt    3     111102,541 ±   27053,753  ns/op
+CpuDivisionBenchmark.manualBitArraySetOnly                       1048576         200000  avgt    3     438821,655 ±  146022,972  ns/op
 ```
 </details>

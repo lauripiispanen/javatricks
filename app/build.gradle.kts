@@ -138,7 +138,7 @@ tasks.named("compileJava") {
 
 tasks.register("runJmh", Exec::class) {
     group = "benchmarks"
-    description = "Runs JMH benchmarks with CompletableFuture tests"
+    description = "Runs JMH benchmarks with tests"
     
     dependsOn("jmhJar")
     
@@ -150,7 +150,7 @@ tasks.register("runJmh", Exec::class) {
     val warmupTime = project.findProperty("jmh.warmupTime") ?: "3s"
     val blobDir = project.findProperty("jmh.blobDir") 
         ?: "${System.getProperty("user.home")}/work/javatricks/app/blobs"
-    val includes = project.findProperty("jmh.includes") ?: ".*CompletableFuture.*"
+    val includes = project.findProperty("jmh.includes") ?: ".*"
     val nativeLibPath = nativeLibPath.get().asFile.absolutePath
     
         workingDir = projectDir
